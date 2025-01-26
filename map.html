@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload History Map</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.8.0/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.8.0/dist/leaflet.js"></script>
+    <style>
+        #map {
+            height: 600px;
+        }
+        .back-button {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .back-button a {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .back-button a:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="text-center">
+        <h1>Upload History Map</h1>
+    </div>
+
+    <div id="map"></div>
+
+    <!-- Go Back Button -->
+    <div class="back-button">
+        <a href="/" class="btn btn-primary">Go Back</a>
+    </div>
+
+    <script>
+        // Initialize the map
+        const map = L.map('map').setView([0, 0], 2); // Default view set to the world
+
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Upload history passed from Flask
+        const uploadHistory = {{ upload_history|tojson }};
+
+        // Define bounds for map to focus on markers
+        const bounds = [];
+
+        // Group data by location
+        const locationData = {};
+
+        // Group trash bag types by location
+        uploadHistory.forEach(upload => {
+            const location = upload.location;
+
+            // If location doesn't exist in the object, initialize it
+            if (!locationData[location]) {
+                locationData[location] = {
+                    trashTypes: {},
+                    totalTrash: 0,
+                    timestamp: upload.timestamp
+                };
+            }
+
+            // Split the response into individual trash types and their counts
+            const trashItems = upload.response.split(", ");
+            trashItems.forEach(item => {
+                const [count, trashType] = item.split(" ");
+                const countInt = parseInt(count);
+
+                // Aggregate trash types and their counts
+                if (!locationData[location].trashTypes[trashType]) {
+                    locationData[location].trashTypes[trashType] = 0;
+                }
+                locationData[location].trashTypes[trashType] += countInt;
+                locationData[location].totalTrash += countInt;
+            });
+
+            // Store the bounds for the map to focus on markers
+            bounds.push([upload.latitude, upload.longitude]);
+        });
+
+        // Add markers for each location with grouped data
+        Object.keys(locationData).forEach(location => {
+            const data = locationData[location];
+            const marker = L.marker([uploadHistory[0].latitude, uploadHistory[0].longitude]).addTo(map);
+
+            // Format the popup with the trash types and total trash bags
+            let popupContent = `<strong>Location:</strong> ${location}<br><strong>Total Trash Bags:</strong> ${data.totalTrash}<br><strong>Timestamp:</strong> ${data.timestamp}<br><br>`;
+
+            // List each trash type with its count
+            for (const [trashType, count] of Object.entries(data.trashTypes)) {
+                popupContent += `<strong>${trashType}:</strong> ${count} bags<br>`;
+            }
+
+            marker.bindPopup(popupContent);
+
+        });
+
+        // Adjust map view to fit all markers
+        if (bounds.length > 0) {
+            map.fitBounds(bounds);
+        }
+    </script>
+</body>
+</html>
